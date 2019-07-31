@@ -505,6 +505,17 @@ struct CurlDownloader : public Downloader
             stopWorkerThread();
         });
 
+        /* NINJATRAPPEUR_TOREMOVE: quick test */
+        auto curlmn = curl_multi_init();
+        #if LIBCURL_VERSION_NUM >= 0x072b00 // Multiplex requires >= 7.43.0
+        curl_multi_setopt(curlm, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+        #endif
+        #if LIBCURL_VERSION_NUM >= 0x071e00 // Max connections requires >= 7.30.0
+        curl_multi_setopt(curlm, CURLMOPT_MAX_TOTAL_CONNECTIONS,
+            downloadSettings.httpConnections.get());
+        #endif
+        /* =================== */
+
         std::map<CURL *, std::shared_ptr<DownloadItem>> items;
 
         bool quit = false;
@@ -516,19 +527,19 @@ struct CurlDownloader : public Downloader
 
             /* Let curl do its thing. */
             int running;
-            CURLMcode mc = curl_multi_perform(curlm, &running);
+            CURLMcode mc = curl_multi_perform(curlmn, &running);
             if (mc != CURLM_OK)
                 throw nix::Error(format("unexpected error from curl_multi_perform(): %s") % curl_multi_strerror(mc));
 
             /* Set the promises of any finished requests. */
             CURLMsg * msg;
             int left;
-            while ((msg = curl_multi_info_read(curlm, &left))) {
+            while ((msg = curl_multi_info_read(curlmn, &left))) {
                 if (msg->msg == CURLMSG_DONE) {
                     auto i = items.find(msg->easy_handle);
                     assert(i != items.end());
                     i->second->finish(msg->data.result);
-                    curl_multi_remove_handle(curlm, i->second->req);
+                    curl_multi_remove_handle(curlmn, i->second->req);
                     i->second->active = false;
                     items.erase(i);
                 }
@@ -546,7 +557,7 @@ struct CurlDownloader : public Downloader
                 ? std::max(0, (int) std::chrono::duration_cast<std::chrono::milliseconds>(nextWakeup - std::chrono::steady_clock::now()).count())
                 : maxSleepTimeMs;
             vomit("download thread waiting for %d ms", sleepTimeMs);
-            mc = curl_multi_wait(curlm, extraFDs, 1, sleepTimeMs, &numfds);
+            mc = curl_multi_wait(curlmn, extraFDs, 1, sleepTimeMs, &numfds);
             if (mc != CURLM_OK)
                 throw nix::Error(format("unexpected error from curl_multi_wait(): %s") % curl_multi_strerror(mc));
 
@@ -585,11 +596,14 @@ struct CurlDownloader : public Downloader
             for (auto & item : incoming) {
                 debug("starting %s of %s", item->request.verb(), item->request.uri);
                 item->init();
-                curl_multi_add_handle(curlm, item->req);
+                curl_multi_add_handle(curlmn, item->req);
                 item->active = true;
                 items[item->req] = item;
             }
         }
+        /* NINJATRPPEUR_TODO test stuff, toremove */
+        if (curlmn) curl_multi_cleanup(curlmn);
+        /* END */
 
         debug("download thread shutting down");
     }
