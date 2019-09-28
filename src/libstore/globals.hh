@@ -353,8 +353,10 @@ public:
 
     Setting<Paths> pluginFiles{this, {}, "plugin-files",
         "Plugins to dynamically load at nix initialization time."};
-};
 
+    Setting<bool> profileEvaluation{this, false, "profile-function-calls",
+        "Generates a callgraph profile summary which you can interpret using kcachegrind."};
+};
 
 // FIXME: don't use a global variable.
 extern Settings settings;

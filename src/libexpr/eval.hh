@@ -8,7 +8,11 @@
 #include "config.hh"
 #include "function-trace.hh"
 
+#include <forward_list>
 #include <map>
+#include <optional>
+#include <optional>
+#include <stack>
 #include <unordered_map>
 
 
@@ -18,6 +22,74 @@ namespace nix {
 class Store;
 class EvalState;
 enum RepairFlag : bool;
+
+/* Profiler-related operations.
+   [callGrindSpec]: TODO: add URL */
+
+typedef string CostCenterName;
+typedef string FileName;
+typedef int CompressedCostCenterId;
+typedef int CompressedFileId;
+typedef int LineNumber;
+typedef int BullshitCost;
+
+struct PosCost {
+    LineNumber line;
+    BullshitCost cost;
+};
+
+struct CallCost {
+    LineNumber line;
+    int nbCalls;
+};
+
+struct CallGraphCall {
+    FileName fileName;
+    CostCenterName costCenter;
+    PosCost pos;
+};
+
+struct CallGraphCostEntry {
+    FileName fileName;
+    CostCenterName costCenter;
+    std::forward_list<CallGraphCall> calls;
+    PosCost pos;
+};
+
+enum ProfilerCallType { select=0, var};
+
+struct ProfilerCallLevel {
+    std::optional<std::shared_ptr<ProfilerCallLevel>> parent;
+    std::forward_list<std::shared_ptr<ProfilerCallLevel>> children;
+    Pos* pos;
+    CostCenterName name;
+    ProfilerCallType type;
+    bool visited;
+};
+
+class ProfilerState {
+
+public:
+    ProfilerState();
+    CompressedFileId registerFile(FileName& fName);
+    CompressedCostCenterId registerCostCenter(CostCenterName& fName);
+    void jumpInValue(Pos* pos, CostCenterName name, ProfilerCallType type);
+    void jumpOutValue();
+    void printCallGraph();
+
+private:
+    /* We index every func and file to leverage Callgrind's string compression.
+       See section "3.1.6.Subposition Compression" section from [callgrindSpec]. */
+    std::map<CostCenterName,CompressedCostCenterId> costMap;
+    std::map<FileName,CompressedFileId> fileMap;
+    CompressedCostCenterId currentCostCenterId;
+    CompressedFileId currentFileId;
+    std::stack<std::shared_ptr<ProfilerCallLevel>> callGraphStack;
+    std::optional<std::shared_ptr<ProfilerCallLevel>> lastProfilerCall;
+    std::optional<std::shared_ptr<ProfilerCallLevel>> profilerTreeRoot;
+    std::forward_list<CallGraphCostEntry> costEntries;
+    void renderCostEntries(std::forward_list<CallGraphCostEntry> costEntries);
+};
 
 
 typedef void (* PrimOpFun) (EvalState & state, const Pos & pos, Value * * args, Value & v);
@@ -311,6 +383,10 @@ private:
     friend struct ExprOpConcatLists;
     friend struct ExprSelect;
     friend void prim_getAttr(EvalState & state, const Pos & pos, Value * * args, Value & v);
+
+    /* Profiler-related members */
+    ProfilerState profState;
+
 };
 
 
@@ -353,6 +429,7 @@ struct EvalSettings : Config
 
     Setting<bool> traceFunctionCalls{this, false, "trace-function-calls",
         "Emit log messages for each function entry and exit at the 'vomit' log level (-vvvv)"};
+
 };
 
 extern EvalSettings evalSettings;

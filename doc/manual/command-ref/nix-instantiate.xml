@@ -43,6 +43,7 @@
       <arg choice='plain'><option>--expr</option></arg>
       <arg choice='plain'><option>-E</option></arg>
     </group>
+    <arg choice='plain'><option>--profile</option></arg>
     <arg choice='plain' rep='repeat'><replaceable>files</replaceable></arg>
   </cmdsynopsis>
   <cmdsynopsis>
@@ -150,6 +151,19 @@ input.</para>
   </varlistentry>
 
   <varlistentry><term><option>--read-write-mode</option></term>
+
+    <listitem><para>When used with <option>--eval</option>, perform
+    evaluation in read/write mode so nix language features that
+    require it will still work (at the cost of needing to do
+    instantiation of every evaluated derivation). If this option is
+    not enabled, there may be uninstantiated store paths in the final
+    output.</para>
+
+    </listitem>
+
+  </varlistentry>
+
+  <varlistentry><term><option>--profile</option></term>
 
     <listitem><para>When used with <option>--eval</option>, perform
     evaluation in read/write mode so nix language features that

@@ -54,6 +54,11 @@ public:
     }
 
     friend std::ostream & operator << (std::ostream & str, const Symbol & sym);
+
+    string str() const
+    {
+        return *s;
+    }
 };
 
 class SymbolTable

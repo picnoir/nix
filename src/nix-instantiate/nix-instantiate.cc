@@ -140,6 +140,8 @@ static int _main(int argc, char * * argv)
                 repair = Repair;
             else if (*arg == "--dry-run")
                 settings.readOnlyMode = true;
+            else if (*arg == "--profile")
+                settings.profileEvaluation = true;
             else if (*arg != "" && arg->at(0) == '-')
                 return false;
             else
