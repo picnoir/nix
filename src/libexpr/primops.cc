@@ -871,7 +871,6 @@ static void prim_tryEval(EvalState & state, const PosIdx pos, Value * * args, Va
         attrs.alloc(state.sValue).mkBool(false);
         attrs.alloc("success").mkBool(false);
     }
-
     // restore the debugRepl pointer if we saved it earlier.
     if (savedDebugRepl)
         state.debugRepl = savedDebugRepl;

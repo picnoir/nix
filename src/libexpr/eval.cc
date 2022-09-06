@@ -21,6 +21,7 @@
 #include <functional>
 
 #include <sys/resource.h>
+#include <sys/sdt.h>
 
 #if HAVE_BOEHMGC
 
@@ -34,6 +35,17 @@
 #include <boost/context/stack_context.hpp>
 
 #endif
+
+#define DTRACE_EVAL_IN(evalState, probeName)  \
+     Pos dtrace_pos = evalState.positions[this->getPos()]; \
+     long exprId = evalState.exprId; \
+     evalState.exprId++; \
+     DTRACE_PROBE4(nix, probeName, exprId, dtrace_pos.line, dtrace_pos.column, dtrace_pos.file.c_str());
+
+// note: DTRACE_EVAL_OUT should *always* be expanded in a scope where
+// a DTRACE_EVAL_IN has already been expanded.
+#define DTRACE_EVAL_OUT(probeName, exprId) \
+    DTRACE_PROBE1(nix, probeName, exprId);
 
 namespace nix {
 
@@ -468,6 +480,7 @@ EvalState::EvalState(
     , debugStop(false)
     , debugQuit(false)
     , trylevel(0)
+    , exprId(0)
     , regexCache(makeRegexCache())
 #if HAVE_BOEHMGC
     , valueAllocCache(std::allocate_shared<void *>(traceable_allocator<void *>(), nullptr))
@@ -1269,7 +1282,14 @@ void EvalState::cacheFile(
 
 void EvalState::eval(Expr * e, Value & v)
 {
+    auto dtrace_pos = this->positions[e->getPos()];
+    long exprId = this->exprId;
+    this->exprId++;
+    DTRACE_PROBE4(nix, top_level__in, exprId, dtrace_pos.line, dtrace_pos.column, dtrace_pos.file.c_str());
+
     e->eval(*this, baseEnv, v);
+
+    DTRACE_EVAL_OUT(top_level__out, exprId);
 }
 
 
@@ -1332,6 +1352,8 @@ void ExprPath::eval(EvalState & state, Env & env, Value & v)
 
 void ExprAttrs::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, attrs__in);
+
     v.mkAttrs(state.buildBindings(attrs.size() + dynamicAttrs.size()).finish());
     auto dynamicEnv = &env;
 
@@ -1411,11 +1433,15 @@ void ExprAttrs::eval(EvalState & state, Env & env, Value & v)
     }
 
     v.attrs->pos = pos;
+
+    DTRACE_EVAL_OUT(attrs__out, exprId);
 }
 
 
 void ExprLet::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, let__in);
+
     /* Create a new environment that contains the attributes in this
        `let'. */
     Env & env2(state.allocEnv(attrs->attrs.size()));
@@ -1429,22 +1455,32 @@ void ExprLet::eval(EvalState & state, Env & env, Value & v)
         env2.values[displ++] = i.second.e->maybeThunk(state, i.second.inherited ? env : env2);
 
     body->eval(state, env2, v);
+
+    DTRACE_EVAL_OUT(let__out, exprId);
 }
 
 
 void ExprList::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, list__in);
+
     state.mkList(v, elems.size());
     for (auto [n, v2] : enumerate(v.listItems()))
         const_cast<Value * &>(v2) = elems[n]->maybeThunk(state, env);
+
+    DTRACE_EVAL_OUT(list__out, exprId);
 }
 
 
 void ExprVar::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, var__in);
+
     Value * v2 = state.lookupVar(&env, *this, false);
     state.forceValue(*v2, pos);
     v = *v2;
+
+    DTRACE_EVAL_OUT(var__out, exprId);
 }
 
 
@@ -1469,9 +1505,12 @@ static std::string showAttrPath(EvalState & state, Env & env, const AttrPath & a
 
 void ExprSelect::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, select__in);
+
     Value vTmp;
     PosIdx pos2;
     Value * vAttrs = &vTmp;
+
 
     e->eval(state, env, vTmp);
 
@@ -1496,6 +1535,7 @@ void ExprSelect::eval(EvalState & state, Env & env, Value & v)
                     (j = vAttrs->attrs->find(name)) == vAttrs->attrs->end())
                 {
                     def->eval(state, env, v);
+                    DTRACE_EVAL_OUT(select_short__out, exprId);
                     return;
                 }
             } else {
@@ -1526,11 +1566,15 @@ void ExprSelect::eval(EvalState & state, Env & env, Value & v)
     }
 
     v = *vAttrs;
+
+    DTRACE_EVAL_OUT(select__out, exprId);
 }
 
 
 void ExprOpHasAttr::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, has_attr__in);
+
     Value vTmp;
     Value * vAttrs = &vTmp;
 
@@ -1544,6 +1588,7 @@ void ExprOpHasAttr::eval(EvalState & state, Env & env, Value & v)
             (j = vAttrs->attrs->find(name)) == vAttrs->attrs->end())
         {
             v.mkBool(false);
+            DTRACE_EVAL_OUT(has_attr_failed__out, exprId);
             return;
         } else {
             vAttrs = j->value;
@@ -1551,12 +1596,17 @@ void ExprOpHasAttr::eval(EvalState & state, Env & env, Value & v)
     }
 
     v.mkBool(true);
+    DTRACE_EVAL_OUT(has_attr__out, exprId);
 }
 
 
 void ExprLambda::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, lambda__in);
+
     v.mkLambda(&env, this);
+
+    DTRACE_EVAL_OUT(lambda__out, exprId);
 }
 
 
@@ -1748,14 +1798,23 @@ void EvalState::callFunction(Value & fun, size_t nrArgs, Value * * args, Value &
 
 void ExprCall::eval(EvalState & state, Env & env, Value & v)
 {
-    Value vFun;
-    fun->eval(state, env, vFun);
+    DTRACE_EVAL_IN(state, call__in);
 
-    Value * vArgs[args.size()];
-    for (size_t i = 0; i < args.size(); ++i)
-        vArgs[i] = args[i]->maybeThunk(state, env);
+    try {
+        Value vFun;
+        fun->eval(state, env, vFun);
 
-    state.callFunction(vFun, args.size(), vArgs, v, pos);
+        Value * vArgs[args.size()];
+        for (size_t i = 0; i < args.size(); ++i)
+            vArgs[i] = args[i]->maybeThunk(state, env);
+
+        state.callFunction(vFun, args.size(), vArgs, v, pos);
+
+        DTRACE_EVAL_OUT(call__out, exprId);
+    } catch (AssertionError &e) {
+        DTRACE_EVAL_OUT(call_throwned__out, exprId);
+        throw e;
+    }
 }
 
 
@@ -1808,7 +1867,7 @@ void EvalState::autoCallFunction(Bindings & args, Value & fun, Value & res)
 Nix attempted to evaluate a function as a top level expression; in
 this case it must have its arguments supplied either by default
 values, or passed explicitly with '--arg' or '--argstr'. See
-https://nixos.org/manual/nix/stable/expressions/language-constructs.html#functions.)", symbols[i.name],                 
+https://nixos.org/manual/nix/stable/expressions/language-constructs.html#functions.)", symbols[i.name],
                 *fun.lambda.env, *fun.lambda.fun);
             }
         }
@@ -1820,6 +1879,8 @@ https://nixos.org/manual/nix/stable/expressions/language-constructs.html#functio
 
 void ExprWith::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, with__in);
+
     Env & env2(state.allocEnv(1));
     env2.up = &env;
     env2.prevWith = prevWith;
@@ -1827,23 +1888,33 @@ void ExprWith::eval(EvalState & state, Env & env, Value & v)
     env2.values[0] = (Value *) attrs;
 
     body->eval(state, env2, v);
+
+    DTRACE_EVAL_OUT(with__out, exprId);
 }
 
 
 void ExprIf::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, if__in);
+
     (state.evalBool(env, cond, pos) ? then : else_)->eval(state, env, v);
+
+    DTRACE_EVAL_OUT(if__out, exprId);
 }
 
 
 void ExprAssert::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, assert__in)
+
     if (!state.evalBool(env, cond, pos)) {
         std::ostringstream out;
         cond->show(state.symbols, out);
         state.throwAssertionError(pos, "assertion '%1%' failed", out.str(), env, *this);
     }
     body->eval(state, env, v);
+
+    DTRACE_EVAL_OUT(assert__out, exprId);
 }
 
 
@@ -1889,14 +1960,24 @@ void ExprOpImpl::eval(EvalState & state, Env & env, Value & v)
 
 void ExprOpUpdate::eval(EvalState & state, Env & env, Value & v)
 {
+    DTRACE_EVAL_IN(state, op_update__in);
+
     Value v1, v2;
     state.evalAttrs(env, e1, v1);
     state.evalAttrs(env, e2, v2);
 
     state.nrOpUpdates++;
 
-    if (v1.attrs->size() == 0) { v = v2; return; }
-    if (v2.attrs->size() == 0) { v = v1; return; }
+    if (v1.attrs->size() == 0) {
+        v = v2;
+        DTRACE_EVAL_OUT(op_update_empty1__out, exprId);
+        return;
+    }
+    if (v2.attrs->size() == 0) {
+        v = v1;
+        DTRACE_EVAL_OUT(op_update_empty2__out, exprId);
+        return;
+    }
 
     auto attrs = state.buildBindings(v1.attrs->size() + v2.attrs->size());
 
@@ -1922,6 +2003,8 @@ void ExprOpUpdate::eval(EvalState & state, Env & env, Value & v)
     v.mkAttrs(attrs.alreadySorted());
 
     state.nrOpUpdateValuesCopied += v.attrs->size();
+
+    DTRACE_EVAL_OUT(op_update__out, exprId);
 }
 
 
