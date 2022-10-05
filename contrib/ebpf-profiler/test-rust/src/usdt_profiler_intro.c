@@ -9,4 +9,9 @@ struct trace_event_in {
   char file[128];
 };
 
+struct trace_event_out {
+  u64 ts;
+  u64 expr_id;
+};
+
 BPF_PERF_OUTPUT(events);

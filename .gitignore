@@ -127,3 +127,5 @@ nix-rust/target
 result
 
 .vscode/
+
+target/
