@@ -1,6 +1,6 @@
 #include <linux/string.h>
 
-struct trace_event_in {
+struct trace_event {
   u64 ts;
   u64 expr_id;
   u32 line;

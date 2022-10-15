@@ -24,7 +24,7 @@ def generate_bpf_function_for_probe_in(probe_name):
     return f"""
 int usdt_trace_in_{probe_name} (struct pt_regs *ctx) {{
   uint64_t addr;
-  struct trace_event_in trace_event = {{0}};
+  struct trace_event trace_event = {{0}};
 
   trace_event.ts = bpf_ktime_get_ns();
 
@@ -39,7 +39,7 @@ int usdt_trace_in_{probe_name} (struct pt_regs *ctx) {{
 
   strcpy(trace_event.probe_name, "{probe_name}");
 
-  events.perf_submit(ctx, &trace_event, sizeof(struct trace_event_in));
+  events.perf_submit(ctx, &trace_event, sizeof(struct trace_event));
   return 0;
 }};
 """
@@ -47,14 +47,14 @@ int usdt_trace_in_{probe_name} (struct pt_regs *ctx) {{
 def generate_bpf_function_for_probe_out(probe_name):
     return f"""
 int usdt_trace_out_{probe_name} (struct pt_regs *ctx) {{
-  struct trace_event_out trace_event = {{0}};
+  struct trace_event trace_event = {{0}};
 
   trace_event.ts = bpf_ktime_get_ns();
 
   uint64_t addr;
   bpf_usdt_readarg(1, ctx, &trace_event.expr_id);
 
-  events.perf_submit(ctx, &trace_event, sizeof(struct trace_event_out));
+  events.perf_submit(ctx, &trace_event, sizeof(struct trace_event));
 
   return 0;
 }};
