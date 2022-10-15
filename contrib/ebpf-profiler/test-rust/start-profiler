@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+nix-shell --run "cargo build --release && sudo ./target/release/test-rust /home/ninjatrappeur/code-root/github.com/NixOS/nix/outputs/out/lib/libnixexpr.so"
