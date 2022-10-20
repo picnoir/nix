@@ -175,6 +175,8 @@ void Value::print(const SymbolTable & symbols, std::ostream & str,
     case tFloat:
         str << fpoint;
         break;
+    case tBlackhole:
+        str << "<BLACKHOLE - currently evaluating this attribute>";
     default:
         abort();
     }
