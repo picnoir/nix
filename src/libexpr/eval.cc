@@ -48,6 +48,10 @@ struct TraceData {
             p.line
         };
     }
+
+    void print(std::ostream & os) {
+        os << file << " " << line;
+    }
 };
 
 template<typename Data, size_t size>
@@ -100,14 +104,14 @@ struct TracingBuffer {
     typedef TracingChunk<Data, chunk_size> TC;
     // Linked-list of all the chunks that we know about, the last chunk in the list is the latest
     std::list<TC> chunks;
-    TC& current_chunk; // FIXME: undefined before alloc_new_chunk
+    TC* current_chunk; // FIXME: undefined before alloc_new_chunk
 
-    TracingBuffer() {
+    TracingBuffer() : current_chunk(NULL) {
         alloc_next_chunk();
     }
 
     inline void alloc_next_chunk() {
-        current_chunk = chunks.emplace_back(TC());
+        current_chunk = &chunks.emplace_back(TC());
     }
 
     inline typename TC::EntryRAII create(Data d) {
@@ -116,14 +120,16 @@ struct TracingBuffer {
 #define unlikely(x) __builtin_expect((x), 0)
 #endif
 
-        if (unlikely(!current_chunk.has_capacity())) {
+        if (unlikely(!current_chunk->has_capacity())) {
             alloc_next_chunk();
         }
 
-        return current_chunk.create(d);
+        return current_chunk->create(d);
     }
 };
 
+// FIXME: move this to the header file and the EvalState type so we
+// don't use a global state to do tracing.
 typedef TracingBuffer<TraceData> TracingBufferT;
 std::unique_ptr<TracingBufferT> trace;
 
@@ -572,6 +578,7 @@ EvalState::EvalState(
     , baseEnv(allocEnv(128))
     , staticBaseEnv{std::make_shared<StaticEnv>(false, nullptr)}
 {
+    trace = std::make_unique<TracingBufferT>();
     countCalls = getEnv("NIX_COUNT_CALLS").value_or("0") != "0";
 
     assert(gcInitialised);
@@ -1370,6 +1377,28 @@ void EvalState::eval(Expr * e, Value & v)
     }
 
     e->eval(*this, baseEnv, v);
+}
+
+void EvalState::printTraces() const {
+    bool showTrace = getEnv("NIX_SHOW_TRACE").value_or("0") != "0";
+
+    if (!trace || !showTrace) {
+        return;
+    }
+
+    for (auto it = trace->chunks.begin(); it != trace->chunks.end(); it++) {
+        auto chunk = *it;
+        for (size_t i = 0; i < chunk.pos; i++) {
+            auto e = chunk.data[i];
+            std::cout << e.ts_entry << " ";
+            e.data.print(std::cout);
+            std::cout << " " << std::endl;
+
+            std::cout << e.ts_exit << " ";
+            e.data.print(std::cout);
+            std::cout << " " << std::endl;
+        }
+    }
 }
 
 

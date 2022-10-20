@@ -190,6 +190,7 @@ static int main_nix_instantiate(int argc, char * * argv)
                 evalOnly, outputKind, xmlOutputSourceLocation, e);
         }
 
+        state->printTraces();
         state->printStats();
 
         return 0;

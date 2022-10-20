@@ -126,6 +126,8 @@ public:
     RootValue vCallFlake = nullptr;
     RootValue vImportedDrvToDerivation = nullptr;
 
+    void printTraces() const;
+
     /* Debugger */
     void (* debugRepl)(ref<EvalState> es, const ValMap & extraEnv);
     bool debugStop;
