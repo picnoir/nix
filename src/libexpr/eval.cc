@@ -1288,39 +1288,48 @@ void EvalState::printTraces() const {
         return;
     }
 
-    std::deque<TracingBufferT::TC::Entry*> entries;
+    std::deque<TracingBufferT::TC::Entry*> stack;
 
     for (auto it = tracingBuffer->chunks.begin(); it != tracingBuffer->chunks.end(); it++) {
-        auto chunk = *it;
+        auto & chunk = *it;
         for (size_t i = 0; i < chunk.pos; i++) {
             auto * e = &chunk.data[i];
 
-            for (auto eit = entries.rbegin(); eit != entries.rend(); eit++) {
+            size_t n = 0;
+            for (auto eit = stack.rbegin(); eit != stack.rend(); eit++) {
                 auto element = *eit;
                 if (element->ts_exit < e->ts_entry) {
-                    entries.pop_back();
+                    n++;
                     std::cout << element->ts_exit << " out ";
                     element->data.print(std::cout);
                     std::cout << " " << std::endl;
+                    assert(!element->data.invalid);
+                    element->data.invalid = true;
+                } else {
+                    break;
                 }
             }
 
-
+            while (n > 0) {
+                stack.pop_back();
+                n--;
+            }
 
             std::cout << e->ts_entry << " in ";
             e->data.print(std::cout);
             std::cout << " " << std::endl;
 
-
-            entries.push_back(e);
+            stack.push_back(e);
         }
+    }
 
-        for (auto eit = entries.rbegin(); eit != entries.rend(); eit++) {
-            auto element = *eit;
-            std::cout << element->ts_exit << " out ";
-            element->data.print(std::cout);
-            std::cout << " " << std::endl;
-        }
+    for (auto eit = stack.rbegin(); eit != stack.rend(); eit++) {
+        auto element = *eit;
+        std::cout << element->ts_exit << " out ";
+        element->data.print(std::cout);
+        std::cout << " " << std::endl;
+        assert(!element->data.invalid);
+        element->data.invalid = true;
     }
 }
 

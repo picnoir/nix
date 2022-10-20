@@ -8,12 +8,15 @@
 
 namespace nix {
 
+
 struct TraceData {
     std::string file;
     const char * type;
     size_t line;
+    uint64_t id;
+    bool invalid;
 
-    TraceData() {}
+    TraceData() : file(""), type(""), line(0), id(0), invalid(true) {}
     TraceData(Pos p, const char* t);
     void print(std::ostream & os);
 };
@@ -38,7 +41,7 @@ struct TracingChunk {
 
             clock_gettime(CLOCK_MONOTONIC, &ts);
             const auto ns = uint64_t(ts.tv_nsec);
-            const auto s = (uint64_t(ts.tv_sec) * 100000000);
+            const auto s = (uint64_t(ts.tv_sec) * 1000000000);
             return s + ns;
         }
 

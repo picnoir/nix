@@ -11,6 +11,7 @@
 #include "value-to-json.hh"
 #include "value-to-xml.hh"
 #include "primops.hh"
+#include "tracing.hh"
 
 #include <boost/container/small_vector.hpp>
 
@@ -100,6 +101,8 @@ struct RealisePathFlags {
 static Path realisePath(EvalState & state, const PosIdx pos, Value & v, const RealisePathFlags flags = {})
 {
     PathSet context;
+
+    // NIX_TRACE(state, state.positions[pos],"realisePath");
 
     auto path = [&]()
     {
