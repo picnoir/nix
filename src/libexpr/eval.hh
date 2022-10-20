@@ -7,6 +7,7 @@
 #include "symbol-table.hh"
 #include "config.hh"
 #include "experimental-features.hh"
+#include "tracing.hh"
 
 #include <map>
 #include <optional>
@@ -92,6 +93,7 @@ class EvalState : public std::enable_shared_from_this<EvalState>
 public:
     SymbolTable symbols;
     PosTable positions;
+    std::unique_ptr<TracingBufferT> tracingBuffer;
 
     static inline std::string derivationNixPath = "//builtin/derivation.nix";
 
