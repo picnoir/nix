@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <ctime>
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -40,17 +41,28 @@ namespace nix {
 struct TraceData {
     // Dummy
     std::string file;
+    const char * type;
     size_t line;
+    Expr* expr;
 
-    static TraceData fromPos(Pos p) {
+    static TraceData fromPos(Pos p, Expr* e, const char* t) {
+
+        // If the origin is a String don't use the location as
+        // otherwise we emit the entire input string as "file".
+        auto file =
+            (p.origin == foString) ? "<string>" :
+            ((p.origin == foStdin) ? "<stdin>" : p.file);
+
         return TraceData {
-            p.file,
-            p.line
+            .file = file,
+            .type = t,
+            .line = p.line,
+            .expr = nullptr,
         };
     }
 
     void print(std::ostream & os) {
-        os << file << " " << line;
+        os << ((size_t)this) << " " << (file.size() > 0? file : "<undefined>") << " " << type << " " << line;
     }
 };
 
@@ -64,9 +76,12 @@ struct TracingChunk {
     };
 
     static inline uint64_t now() {
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        return (uint64_t(tv.tv_sec) * 100000) | tv.tv_usec;
+        struct timespec ts;
+
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        const auto ms = uint64_t(ts.tv_nsec);
+        const auto s = (uint64_t(ts.tv_sec) * 100000000);
+        return s + ms;
     }
 
     struct EntryRAII {
@@ -77,7 +92,12 @@ struct TracingChunk {
         }
 
         ~EntryRAII() {
-            e->ts_exit = now();
+            auto n = now();
+            e->ts_exit = n;
+        }
+
+        Data* operator->() {
+            return &e->data;
         }
     };
 
@@ -115,12 +135,8 @@ struct TracingBuffer {
     }
 
     inline typename TC::EntryRAII create(Data d) {
-#ifndef unlikely
-        // FIXME detect if the compiler supports this
-#define unlikely(x) __builtin_expect((x), 0)
-#endif
 
-        if (unlikely(!current_chunk->has_capacity())) {
+        if (!current_chunk->has_capacity()) [[unlikely]] {
             alloc_next_chunk();
         }
 
@@ -578,7 +594,10 @@ EvalState::EvalState(
     , baseEnv(allocEnv(128))
     , staticBaseEnv{std::make_shared<StaticEnv>(false, nullptr)}
 {
-    trace = std::make_unique<TracingBufferT>();
+    bool showTrace = getEnv("NIX_SHOW_TRACE").value_or("0") != "0";
+    if (showTrace) {
+        trace = std::make_unique<TracingBufferT>();
+    }
     countCalls = getEnv("NIX_COUNT_CALLS").value_or("0") != "0";
 
     assert(gcInitialised);
@@ -1365,17 +1384,28 @@ void EvalState::cacheFile(
     fileEvalCache[resolvedPath] = v;
     if (path != resolvedPath) fileEvalCache[path] = v;
 }
+ // RAII container to ensure that exiting the call actually calls the destructor, actual type is std::optional<TracingChunk::EntryRAII>
+#define TRACE(pos, e, type)                                             \
+  std::optional<TracingBufferT::TC::EntryRAII> __t = {};                       \
+  {                                                                            \
+    if (trace) [[unlikely]] {                                                  \
+      __t = std::optional(                                                     \
+          trace->create(TraceData::fromPos(pos, e, type)));              \
+    }                                                                          \
+  }
 
+
+// create a "trace point" by passing an eval state reference and an expression
+// ptr
+#define TRACE_ES(es, e) TRACE((es).positions[e->getPos()], e, e->showExprType())
+
+// create a top-level trace-point, for usage within the EvalState class. Assumes
+// `positions` is in scope.
+#define TRACE_TOP(e) TRACE(positions[e->getPos()], e, "top-level")
 
 void EvalState::eval(Expr * e, Value & v)
 {
-
-    std::optional<TracingBufferT::TC::EntryRAII> t = {}; // RAII container to ensure that exiting the call actually calls the destructor, actual type is std::optional<TracingChunk::EntryRAII>
-
-    if (trace) {
-        t = std::optional(trace->create(TraceData::fromPos(positions[e->getPos()])));
-    }
-
+    TRACE_ES(*this, e)
     e->eval(*this, baseEnv, v);
 }
 
@@ -1389,12 +1419,12 @@ void EvalState::printTraces() const {
     for (auto it = trace->chunks.begin(); it != trace->chunks.end(); it++) {
         auto chunk = *it;
         for (size_t i = 0; i < chunk.pos; i++) {
-            auto e = chunk.data[i];
-            std::cout << e.ts_entry << " ";
+            auto & e = chunk.data[i];
+            std::cout << e.ts_entry << " in ";
             e.data.print(std::cout);
             std::cout << " " << std::endl;
 
-            std::cout << e.ts_exit << " ";
+            std::cout << e.ts_exit << " out ";
             e.data.print(std::cout);
             std::cout << " " << std::endl;
         }
@@ -1405,6 +1435,7 @@ void EvalState::printTraces() const {
 inline bool EvalState::evalBool(Env & env, Expr * e)
 {
     Value v;
+    TRACE_TOP(e)
     e->eval(*this, env, v);
     if (v.type() != nBool)
         throwTypeError(noPos, "value is %1% while a Boolean was expected", v, env, *e);
@@ -1415,6 +1446,7 @@ inline bool EvalState::evalBool(Env & env, Expr * e)
 inline bool EvalState::evalBool(Env & env, Expr * e, const PosIdx pos)
 {
     Value v;
+    TRACE_TOP(e)
     e->eval(*this, env, v);
     if (v.type() != nBool)
         throwTypeError(pos, "value is %1% while a Boolean was expected", v, env, *e);
@@ -1424,6 +1456,7 @@ inline bool EvalState::evalBool(Env & env, Expr * e, const PosIdx pos)
 
 inline void EvalState::evalAttrs(Env & env, Expr * e, Value & v)
 {
+    TRACE_TOP(e)
     e->eval(*this, env, v);
     if (v.type() != nAttrs)
         throwTypeError(noPos, "value is %1% while a set was expected", v, env, *e);
@@ -1438,29 +1471,34 @@ void Expr::eval(EvalState & state, Env & env, Value & v)
 
 void ExprInt::eval(EvalState & state, Env & env, Value & v)
 {
-    v = this->v;
+  TRACE_ES(state, this)
+  v = this->v;
 }
 
 
 void ExprFloat::eval(EvalState & state, Env & env, Value & v)
 {
-    v = this->v;
+  TRACE_ES(state, this)
+  v = this->v;
 }
 
 void ExprString::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     v = this->v;
 }
 
 
 void ExprPath::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     v = this->v;
 }
 
 
 void ExprAttrs::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     v.mkAttrs(state.buildBindings(attrs.size() + dynamicAttrs.size()).finish());
     auto dynamicEnv = &env;
 
@@ -1545,6 +1583,7 @@ void ExprAttrs::eval(EvalState & state, Env & env, Value & v)
 
 void ExprLet::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     /* Create a new environment that contains the attributes in this
        `let'. */
     Env & env2(state.allocEnv(attrs->attrs.size()));
@@ -1563,6 +1602,7 @@ void ExprLet::eval(EvalState & state, Env & env, Value & v)
 
 void ExprList::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     state.mkList(v, elems.size());
     for (auto [n, v2] : enumerate(v.listItems()))
         const_cast<Value * &>(v2) = elems[n]->maybeThunk(state, env);
@@ -1571,6 +1611,7 @@ void ExprList::eval(EvalState & state, Env & env, Value & v)
 
 void ExprVar::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     Value * v2 = state.lookupVar(&env, *this, false);
     state.forceValue(*v2, pos);
     v = *v2;
@@ -1598,6 +1639,8 @@ static std::string showAttrPath(EvalState & state, Env & env, const AttrPath & a
 
 void ExprSelect::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
+
     Value vTmp;
     PosIdx pos2;
     Value * vAttrs = &vTmp;
@@ -1663,6 +1706,7 @@ void ExprOpHasAttr::eval(EvalState & state, Env & env, Value & v)
     Value vTmp;
     Value * vAttrs = &vTmp;
 
+  TRACE_ES(state, this)
     e->eval(state, env, vTmp);
 
     for (auto & i : attrPath) {
@@ -1685,6 +1729,7 @@ void ExprOpHasAttr::eval(EvalState & state, Env & env, Value & v)
 
 void ExprLambda::eval(EvalState & state, Env & env, Value & v)
 {
+  TRACE_ES(state, this)
     v.mkLambda(&env, this);
 }
 
@@ -1878,6 +1923,7 @@ void EvalState::callFunction(Value & fun, size_t nrArgs, Value * * args, Value &
 void ExprCall::eval(EvalState & state, Env & env, Value & v)
 {
     Value vFun;
+    TRACE_ES(state, this)
     fun->eval(state, env, vFun);
 
     Value * vArgs[args.size()];
@@ -1949,6 +1995,7 @@ https://nixos.org/manual/nix/stable/expressions/language-constructs.html#functio
 
 void ExprWith::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     Env & env2(state.allocEnv(1));
     env2.up = &env;
     env2.prevWith = prevWith;
@@ -1961,12 +2008,14 @@ void ExprWith::eval(EvalState & state, Env & env, Value & v)
 
 void ExprIf::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     (state.evalBool(env, cond, pos) ? then : else_)->eval(state, env, v);
 }
 
 
 void ExprAssert::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     if (!state.evalBool(env, cond, pos)) {
         std::ostringstream out;
         cond->show(state.symbols, out);
@@ -1978,12 +2027,14 @@ void ExprAssert::eval(EvalState & state, Env & env, Value & v)
 
 void ExprOpNot::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     v.mkBool(!state.evalBool(env, e));
 }
 
 
 void ExprOpEq::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     Value v1; e1->eval(state, env, v1);
     Value v2; e2->eval(state, env, v2);
     v.mkBool(state.eqValues(v1, v2));
@@ -1992,6 +2043,7 @@ void ExprOpEq::eval(EvalState & state, Env & env, Value & v)
 
 void ExprOpNEq::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     Value v1; e1->eval(state, env, v1);
     Value v2; e2->eval(state, env, v2);
     v.mkBool(!state.eqValues(v1, v2));
@@ -2000,18 +2052,21 @@ void ExprOpNEq::eval(EvalState & state, Env & env, Value & v)
 
 void ExprOpAnd::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     v.mkBool(state.evalBool(env, e1, pos) && state.evalBool(env, e2, pos));
 }
 
 
 void ExprOpOr::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     v.mkBool(state.evalBool(env, e1, pos) || state.evalBool(env, e2, pos));
 }
 
 
 void ExprOpImpl::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     v.mkBool(!state.evalBool(env, e1, pos) || state.evalBool(env, e2, pos));
 }
 
@@ -2019,6 +2074,7 @@ void ExprOpImpl::eval(EvalState & state, Env & env, Value & v)
 void ExprOpUpdate::eval(EvalState & state, Env & env, Value & v)
 {
     Value v1, v2;
+    TRACE_ES(state, this)
     state.evalAttrs(env, e1, v1);
     state.evalAttrs(env, e2, v2);
 
@@ -2056,6 +2112,7 @@ void ExprOpUpdate::eval(EvalState & state, Env & env, Value & v)
 
 void ExprOpConcatLists::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     Value v1; e1->eval(state, env, v1);
     Value v2; e2->eval(state, env, v2);
     Value * lists[2] = { &v1, &v2 };
@@ -2094,6 +2151,7 @@ void EvalState::concatLists(Value & v, size_t nrLists, Value * * lists, const Po
 
 void ExprConcatStrings::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     PathSet context;
     std::vector<BackedStringView> s;
     size_t sSize = 0;
@@ -2183,6 +2241,7 @@ void ExprConcatStrings::eval(EvalState & state, Env & env, Value & v)
 
 void ExprPos::eval(EvalState & state, Env & env, Value & v)
 {
+    TRACE_ES(state, this)
     state.mkPos(v, pos);
 }
 
