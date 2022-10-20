@@ -102,7 +102,7 @@ static Path realisePath(EvalState & state, const PosIdx pos, Value & v, const Re
 {
     PathSet context;
 
-    // NIX_TRACE(state, state.positions[pos],"realisePath");
+    NIX_TRACE(state, state.positions[pos], "realisePath");
 
     auto path = [&]()
     {
@@ -163,6 +163,7 @@ static void mkOutputString(
    argument. */
 static void import(EvalState & state, const PosIdx pos, Value & vPath, Value * vScope, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "import");
     auto path = realisePath(state, pos, vPath);
 
     // FIXME
@@ -316,6 +317,7 @@ extern "C" typedef void (*ValueInitializer)(EvalState & state, Value & v);
 /* Load a ValueInitializer from a DSO and return whatever it initializes */
 void prim_importNative(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "importNative");
     auto path = realisePath(state, pos, *args[0]);
 
     std::string sym(state.forceStringNoCtx(*args[1], pos));
@@ -343,6 +345,7 @@ void prim_importNative(EvalState & state, const PosIdx pos, Value * * args, Valu
 /* Execute a program and parse its output */
 void prim_exec(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "exec");
     state.forceList(*args[0], pos);
     auto elems = args[0]->listElems();
     auto count = args[0]->listSize();
@@ -388,6 +391,7 @@ void prim_exec(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 /* Return a string representing the type of the expression. */
 static void prim_typeOf(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "typeOf");
     state.forceValue(*args[0], pos);
     std::string t;
     switch (args[0]->type()) {
@@ -422,6 +426,7 @@ static RegisterPrimOp primop_typeOf({
 /* Determine whether the argument is the null value. */
 static void prim_isNull(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isNull");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nNull);
 }
@@ -442,6 +447,7 @@ static RegisterPrimOp primop_isNull({
 /* Determine whether the argument is a function. */
 static void prim_isFunction(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isFunction");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nFunction);
 }
@@ -458,6 +464,7 @@ static RegisterPrimOp primop_isFunction({
 /* Determine whether the argument is an integer. */
 static void prim_isInt(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isInt");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nInt);
 }
@@ -474,6 +481,7 @@ static RegisterPrimOp primop_isInt({
 /* Determine whether the argument is a float. */
 static void prim_isFloat(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isFloat");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nFloat);
 }
@@ -490,6 +498,7 @@ static RegisterPrimOp primop_isFloat({
 /* Determine whether the argument is a string. */
 static void prim_isString(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isString");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nString);
 }
@@ -506,6 +515,7 @@ static RegisterPrimOp primop_isString({
 /* Determine whether the argument is a Boolean. */
 static void prim_isBool(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isBool");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nBool);
 }
@@ -522,6 +532,7 @@ static RegisterPrimOp primop_isBool({
 /* Determine whether the argument is a path. */
 static void prim_isPath(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isPath");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nPath);
 }
@@ -622,6 +633,7 @@ static Bindings::iterator getAttr(
 
 static void prim_genericClosure(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "genericClosure");
     state.forceAttrs(*args[0], pos);
 
     /* Get the start set. */
@@ -736,6 +748,7 @@ static RegisterPrimOp primop_break({
     )",
     .fun = [](EvalState & state, const PosIdx pos, Value * * args, Value & v)
     {
+        NIX_TRACE(state, state.positions[pos], "break");
         if (state.debugRepl && !state.debugTraces.empty()) {
             auto error = Error(ErrorInfo {
                 .level = lvlInfo,
@@ -769,6 +782,7 @@ static RegisterPrimOp primop_abort({
     )",
     .fun = [](EvalState & state, const PosIdx pos, Value * * args, Value & v)
     {
+        NIX_TRACE(state, state.positions[pos], "abort");
         PathSet context;
         auto s = state.coerceToString(pos, *args[0], context).toOwned();
         state.debugThrowLastTrace(Abort("evaluation aborted with the following error message: '%1%'", s));
@@ -787,6 +801,7 @@ static RegisterPrimOp primop_throw({
     )",
     .fun = [](EvalState & state, const PosIdx pos, Value * * args, Value & v)
     {
+      NIX_TRACE(state, state.positions[pos], "throw");
       PathSet context;
       auto s = state.coerceToString(pos, *args[0], context).toOwned();
       state.debugThrowLastTrace(ThrownError(s));
@@ -795,6 +810,7 @@ static RegisterPrimOp primop_throw({
 
 static void prim_addErrorContext(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "addErrorContext");
     try {
         state.forceValue(*args[1], pos);
         v = *args[1];
@@ -813,6 +829,7 @@ static RegisterPrimOp primop_addErrorContext(RegisterPrimOp::Info {
 
 static void prim_ceil(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "ceil");
     auto value = state.forceFloat(*args[0], args[0]->determinePos(pos));
     v.mkInt(ceil(value));
 }
@@ -832,6 +849,8 @@ static RegisterPrimOp primop_ceil({
 
 static void prim_floor(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "floor");
+
     auto value = state.forceFloat(*args[0], args[0]->determinePos(pos));
     v.mkInt(floor(value));
 }
@@ -853,6 +872,7 @@ static RegisterPrimOp primop_floor({
  * else => {success=false; value=false;} */
 static void prim_tryEval(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "tryEval");
     auto attrs = state.buildBindings(2);
 
     /* increment state.trylevel, and decrement it when this function returns. */
@@ -906,6 +926,7 @@ static RegisterPrimOp primop_tryEval({
 /* Return an environment variable.  Use with care. */
 static void prim_getEnv(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "getEnv");
     std::string name(state.forceStringNoCtx(*args[0], pos));
     v.mkString(evalSettings.restrictEval || evalSettings.pureEval ? "" : getEnv(name).value_or(""));
 }
@@ -930,6 +951,7 @@ static RegisterPrimOp primop_getEnv({
 /* Evaluate the first argument, then return the second argument. */
 static void prim_seq(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "seq");
     state.forceValue(*args[0], pos);
     state.forceValue(*args[1], pos);
     v = *args[1];
@@ -949,6 +971,7 @@ static RegisterPrimOp primop_seq({
    attrsets), then return the second argument. */
 static void prim_deepSeq(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "deepSeq");
     state.forceValueDeep(*args[0]);
     state.forceValue(*args[1], pos);
     v = *args[1];
@@ -969,6 +992,7 @@ static RegisterPrimOp primop_deepSeq({
    return the second expression.  Useful for debugging. */
 static void prim_trace(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "trace");
     state.forceValue(*args[0], pos);
     if (args[0]->type() == nString)
         printError("trace: %1%", args[0]->string.s);
@@ -995,6 +1019,7 @@ static RegisterPrimOp primop_trace({
  */
 static void prim_second(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "second");
     state.forceValue(*args[1], pos);
     v = *args[1];
 }
@@ -1013,6 +1038,7 @@ static void prim_second(EvalState & state, const PosIdx pos, Value * * args, Val
    derivation. */
 static void prim_derivationStrict(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "derivationStrict");
     state.forceAttrs(*args[0], pos);
 
     /* Figure out the name first (for stack backtraces). */
@@ -1371,6 +1397,7 @@ static RegisterPrimOp primop_derivationStrict(RegisterPrimOp::Info {
    ‘out’. */
 static void prim_placeholder(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "placeholder");
     v.mkString(hashPlaceholder(state.forceStringNoCtx(*args[0], pos)));
 }
 
@@ -1394,6 +1421,7 @@ static RegisterPrimOp primop_placeholder({
 /* Convert the argument to a path.  !!! obsolete? */
 static void prim_toPath(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "toPath");
     PathSet context;
     Path path = state.coerceToPath(pos, *args[0], context);
     v.mkString(canonPath(path), context);
@@ -1419,6 +1447,7 @@ static RegisterPrimOp primop_toPath({
    corner cases. */
 static void prim_storePath(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "storePath");
     if (evalSettings.pureEval)
         state.debugThrowLastTrace(EvalError({
             .msg = hintfmt("'%s' is not allowed in pure evaluation mode", "builtins.storePath"),
@@ -1463,6 +1492,7 @@ static RegisterPrimOp primop_storePath({
 
 static void prim_pathExists(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "pathExists");
     /* We don’t check the path right now, because we don’t want to
       throw if the path isn’t allowed, but just return false (and we
       can’t just catch the exception here because we still want to
@@ -1495,6 +1525,7 @@ static RegisterPrimOp primop_pathExists({
    following the last slash. */
 static void prim_baseNameOf(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "baseNameOf");
     PathSet context;
     v.mkString(baseNameOf(*state.coerceToString(pos, *args[0], context, false, false)), context);
 }
@@ -1515,6 +1546,7 @@ static RegisterPrimOp primop_baseNameOf({
    of the argument. */
 static void prim_dirOf(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "dirOf");
     PathSet context;
     auto path = state.coerceToString(pos, *args[0], context, false, false);
     auto dir = dirOf(*path);
@@ -1535,6 +1567,7 @@ static RegisterPrimOp primop_dirOf({
 /* Return the contents of a file as a string. */
 static void prim_readFile(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "readFile");
     auto path = realisePath(state, pos, *args[0]);
     auto s = readFile(path);
     if (s.find((char) 0) != std::string::npos)
@@ -1563,6 +1596,7 @@ static RegisterPrimOp primop_readFile({
    which are desugared to 'findFile __nixPath "x"'. */
 static void prim_findFile(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "findFile");
     state.forceList(*args[0], pos);
 
     SearchPath searchPath;
@@ -1613,6 +1647,7 @@ static RegisterPrimOp primop_findFile(RegisterPrimOp::Info {
 /* Return the cryptographic hash of a file in base-16. */
 static void prim_hashFile(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "hashFile");
     auto type = state.forceStringNoCtx(*args[0], pos);
     std::optional<HashType> ht = parseHashType(type);
     if (!ht)
@@ -1640,6 +1675,7 @@ static RegisterPrimOp primop_hashFile({
 /* Read a directory (without . or ..) */
 static void prim_readDir(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "readDir");
     auto path = realisePath(state, pos, *args[0]);
 
     DirEntries entries = readDirectory(path);
@@ -1689,6 +1725,7 @@ static RegisterPrimOp primop_readDir({
    be sensibly or completely represented (e.g., functions). */
 static void prim_toXML(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "toXML");
     std::ostringstream out;
     PathSet context;
     printValueAsXML(state, true, false, *args[0], out, context, pos);
@@ -1797,6 +1834,7 @@ static RegisterPrimOp primop_toXML({
    represented (e.g., functions). */
 static void prim_toJSON(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "toJSON");
     std::ostringstream out;
     PathSet context;
     printValueAsJSON(state, true, *args[0], pos, out, context);
@@ -1820,6 +1858,7 @@ static RegisterPrimOp primop_toJSON({
 /* Parse a JSON string to a value. */
 static void prim_fromJSON(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "fromJSON");
     auto s = state.forceStringNoCtx(*args[0], pos);
     try {
         parseJSON(state, s, v);
@@ -1848,6 +1887,7 @@ static RegisterPrimOp primop_fromJSON({
    as an input by derivations. */
 static void prim_toFile(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "toFile");
     PathSet context;
     std::string name(state.forceStringNoCtx(*args[0], pos));
     std::string contents(state.forceString(*args[1], context, pos));
@@ -1967,6 +2007,7 @@ static void addPath(
     Value & v,
     const PathSet & context)
 {
+    NIX_TRACE(state, state.positions[pos], "addPath");
     try {
         // FIXME: handle CA derivation outputs (where path needs to
         // be rewritten to the actual output).
@@ -2033,6 +2074,7 @@ static void addPath(
 
 static void prim_filterSource(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "filterSource");
     PathSet context;
     Path path = state.coerceToPath(pos, *args[1], context);
 
@@ -2105,6 +2147,7 @@ static RegisterPrimOp primop_filterSource({
 
 static void prim_path(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "path");
     state.forceAttrs(*args[0], pos);
     Path path;
     std::string name;
@@ -2188,6 +2231,7 @@ static RegisterPrimOp primop_path({
    strings. */
 static void prim_attrNames(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "attrNames");
     state.forceAttrs(*args[0], pos);
 
     state.mkList(v, args[0]->attrs->size());
@@ -2215,6 +2259,7 @@ static RegisterPrimOp primop_attrNames({
    order as attrNames. */
 static void prim_attrValues(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "attrValues");
     state.forceAttrs(*args[0], pos);
 
     state.mkList(v, args[0]->attrs->size());
@@ -2247,6 +2292,7 @@ static RegisterPrimOp primop_attrValues({
 /* Dynamic version of the `.' operator. */
 void prim_getAttr(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "getAttr");
     auto attr = state.forceStringNoCtx(*args[0], pos);
     state.forceAttrs(*args[1], pos);
     Bindings::iterator i = getAttr(
@@ -2277,6 +2323,7 @@ static RegisterPrimOp primop_getAttr({
 /* Return position information of the specified attribute. */
 static void prim_unsafeGetAttrPos(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "unsafeGetAttrPos");
     auto attr = state.forceStringNoCtx(*args[0], pos);
     state.forceAttrs(*args[1], pos);
     Bindings::iterator i = args[1]->attrs->find(state.symbols.create(attr));
@@ -2295,6 +2342,7 @@ static RegisterPrimOp primop_unsafeGetAttrPos(RegisterPrimOp::Info {
 /* Dynamic version of the `?' operator. */
 static void prim_hasAttr(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "hasAttr");
     auto attr = state.forceStringNoCtx(*args[0], pos);
     state.forceAttrs(*args[1], pos);
     v.mkBool(args[1]->attrs->find(state.symbols.create(attr)) != args[1]->attrs->end());
@@ -2314,6 +2362,7 @@ static RegisterPrimOp primop_hasAttr({
 /* Determine whether the argument is a set. */
 static void prim_isAttrs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isAttrs");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nAttrs);
 }
@@ -2329,6 +2378,7 @@ static RegisterPrimOp primop_isAttrs({
 
 static void prim_removeAttrs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "removeAttrs");
     state.forceAttrs(*args[0], pos);
     state.forceList(*args[1], pos);
 
@@ -2377,6 +2427,7 @@ static RegisterPrimOp primop_removeAttrs({
    name, the first takes precedence. */
 static void prim_listToAttrs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "listToAttrs");
     state.forceList(*args[0], pos);
 
     auto attrs = state.buildBindings(args[0]->listSize());
@@ -2439,6 +2490,7 @@ static RegisterPrimOp primop_listToAttrs({
 
 static void prim_intersectAttrs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "intersectAttrs");
     state.forceAttrs(*args[0], pos);
     state.forceAttrs(*args[1], pos);
 
@@ -2465,6 +2517,7 @@ static RegisterPrimOp primop_intersectAttrs({
 
 static void prim_catAttrs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "catAttrs");
     auto attrName = state.symbols.create(state.forceStringNoCtx(*args[0], pos));
     state.forceList(*args[1], pos);
 
@@ -2502,6 +2555,7 @@ static RegisterPrimOp primop_catAttrs({
 
 static void prim_functionArgs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "functionArgs");
     state.forceValue(*args[0], pos);
     if (args[0]->isPrimOpApp() || args[0]->isPrimOp()) {
         v.mkAttrs(&state.emptyBindings);
@@ -2545,6 +2599,7 @@ static RegisterPrimOp primop_functionArgs({
 /*  */
 static void prim_mapAttrs(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "mapAttrs");
     state.forceAttrs(*args[1], pos);
 
     auto attrs = state.buildBindings(args[1]->attrs->size());
@@ -2577,6 +2632,7 @@ static RegisterPrimOp primop_mapAttrs({
 
 static void prim_zipAttrsWith(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "zipAttrsWith");
     // we will first count how many values are present for each given key.
     // we then allocate a single attrset and pre-populate it with lists of
     // appropriate sizes, stash the pointers to the list elements of each,
@@ -2669,6 +2725,7 @@ static RegisterPrimOp primop_zipAttrsWith({
 /* Determine whether the argument is a list. */
 static void prim_isList(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "isList");
     state.forceValue(*args[0], pos);
     v.mkBool(args[0]->type() == nList);
 }
@@ -2684,6 +2741,7 @@ static RegisterPrimOp primop_isList({
 
 static void elemAt(EvalState & state, const PosIdx pos, Value & list, int n, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "elemAt");
     state.forceList(list, pos);
     if (n < 0 || (unsigned int) n >= list.listSize())
         state.debugThrowLastTrace(Error({
@@ -2697,6 +2755,7 @@ static void elemAt(EvalState & state, const PosIdx pos, Value & list, int n, Val
 /* Return the n-1'th element of a list. */
 static void prim_elemAt(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "elemAt");
     elemAt(state, pos, *args[0], state.forceInt(*args[1], pos), v);
 }
 
@@ -2713,6 +2772,7 @@ static RegisterPrimOp primop_elemAt({
 /* Return the first element of a list. */
 static void prim_head(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "head");
     elemAt(state, pos, *args[0], 0, v);
 }
 
@@ -2732,6 +2792,7 @@ static RegisterPrimOp primop_head({
    don't want to use it!  */
 static void prim_tail(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "tail");
     state.forceList(*args[0], pos);
     if (args[0]->listSize() == 0)
         state.debugThrowLastTrace(Error({
@@ -2763,6 +2824,7 @@ static RegisterPrimOp primop_tail({
 /* Apply a function to every element of a list. */
 static void prim_map(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "map");
     state.forceList(*args[1], pos);
 
     state.mkList(v, args[1]->listSize());
@@ -2793,6 +2855,7 @@ static RegisterPrimOp primop_map({
    returns true. */
 static void prim_filter(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "filter");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[1], pos);
 
@@ -2831,6 +2894,7 @@ static RegisterPrimOp primop_filter({
 /* Return true if a list contains a given element. */
 static void prim_elem(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "elem");
     bool res = false;
     state.forceList(*args[1], pos);
     for (auto elem : args[1]->listItems())
@@ -2854,6 +2918,7 @@ static RegisterPrimOp primop_elem({
 /* Concatenate a list of lists. */
 static void prim_concatLists(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "concatLists");
     state.forceList(*args[0], pos);
     state.concatLists(v, args[0]->listSize(), args[0]->listElems(), pos);
 }
@@ -2870,6 +2935,7 @@ static RegisterPrimOp primop_concatLists({
 /* Return the length of a list.  This is an O(1) time operation. */
 static void prim_length(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "length");
     state.forceList(*args[0], pos);
     v.mkInt(args[0]->listSize());
 }
@@ -2887,6 +2953,7 @@ static RegisterPrimOp primop_length({
    right. The operator is applied strictly. */
 static void prim_foldlStrict(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "foldlStrict");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[2], pos);
 
@@ -2920,6 +2987,7 @@ static RegisterPrimOp primop_foldlStrict({
 
 static void anyOrAll(bool any, EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "anyOrAll");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[1], pos);
 
@@ -2939,6 +3007,7 @@ static void anyOrAll(bool any, EvalState & state, const PosIdx pos, Value * * ar
 
 static void prim_any(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "any");
     anyOrAll(true, state, pos, args, v);
 }
 
@@ -2954,6 +3023,7 @@ static RegisterPrimOp primop_any({
 
 static void prim_all(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "all");
     anyOrAll(false, state, pos, args, v);
 }
 
@@ -2969,6 +3039,7 @@ static RegisterPrimOp primop_all({
 
 static void prim_genList(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "genList");
     auto len = state.forceInt(*args[1], pos);
 
     if (len < 0)
@@ -3007,6 +3078,7 @@ static void prim_lessThan(EvalState & state, const PosIdx pos, Value * * args, V
 
 static void prim_sort(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "sort");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[1], pos);
 
@@ -3058,6 +3130,7 @@ static RegisterPrimOp primop_sort({
 
 static void prim_partition(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "partition");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[1], pos);
 
@@ -3118,6 +3191,7 @@ static RegisterPrimOp primop_partition({
 
 static void prim_groupBy(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "groupBy");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[1], pos);
 
@@ -3170,6 +3244,7 @@ static RegisterPrimOp primop_groupBy({
 
 static void prim_concatMap(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "concatMap");
     state.forceFunction(*args[0], pos);
     state.forceList(*args[1], pos);
     auto nrLists = args[1]->listSize();
@@ -3217,6 +3292,7 @@ static RegisterPrimOp primop_concatMap({
 
 static void prim_add(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "add");
     state.forceValue(*args[0], pos);
     state.forceValue(*args[1], pos);
     if (args[0]->type() == nFloat || args[1]->type() == nFloat)
@@ -3236,6 +3312,7 @@ static RegisterPrimOp primop_add({
 
 static void prim_sub(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "sub");
     state.forceValue(*args[0], pos);
     state.forceValue(*args[1], pos);
     if (args[0]->type() == nFloat || args[1]->type() == nFloat)
@@ -3255,6 +3332,7 @@ static RegisterPrimOp primop_sub({
 
 static void prim_mul(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "mul");
     state.forceValue(*args[0], pos);
     state.forceValue(*args[1], pos);
     if (args[0]->type() == nFloat || args[1]->type() == nFloat)
@@ -3274,6 +3352,7 @@ static RegisterPrimOp primop_mul({
 
 static void prim_div(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "div");
     state.forceValue(*args[0], pos);
     state.forceValue(*args[1], pos);
 
@@ -3311,6 +3390,7 @@ static RegisterPrimOp primop_div({
 
 static void prim_bitAnd(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "bitAnd");
     v.mkInt(state.forceInt(*args[0], pos) & state.forceInt(*args[1], pos));
 }
 
@@ -3325,6 +3405,7 @@ static RegisterPrimOp primop_bitAnd({
 
 static void prim_bitOr(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "bitOr");
     v.mkInt(state.forceInt(*args[0], pos) | state.forceInt(*args[1], pos));
 }
 
@@ -3339,6 +3420,7 @@ static RegisterPrimOp primop_bitOr({
 
 static void prim_bitXor(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "bitXor");
     v.mkInt(state.forceInt(*args[0], pos) ^ state.forceInt(*args[1], pos));
 }
 
@@ -3353,6 +3435,7 @@ static RegisterPrimOp primop_bitXor({
 
 static void prim_lessThan(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "lessThan");
     state.forceValue(*args[0], pos);
     state.forceValue(*args[1], pos);
     CompareValues comp{state};
@@ -3381,6 +3464,7 @@ static RegisterPrimOp primop_lessThan({
    `"/nix/store/whatever..."'. */
 static void prim_toString(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "toString");
     PathSet context;
     auto s = state.coerceToString(pos, *args[0], context, true, false);
     v.mkString(*s, context);
@@ -3416,6 +3500,7 @@ static RegisterPrimOp primop_toString({
    non-negative. */
 static void prim_substring(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "substring");
     int start = state.forceInt(*args[0], pos);
     int len = state.forceInt(*args[1], pos);
     PathSet context;
@@ -3452,6 +3537,7 @@ static RegisterPrimOp primop_substring({
 
 static void prim_stringLength(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "stringLength");
     PathSet context;
     auto s = state.coerceToString(pos, *args[0], context);
     v.mkInt(s->size());
@@ -3470,6 +3556,7 @@ static RegisterPrimOp primop_stringLength({
 /* Return the cryptographic hash of a string in base-16. */
 static void prim_hashString(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "hashString");
     auto type = state.forceStringNoCtx(*args[0], pos);
     std::optional<HashType> ht = parseHashType(type);
     if (!ht)
@@ -3518,6 +3605,7 @@ std::shared_ptr<RegexCache> makeRegexCache()
 
 void prim_match(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "match");
     auto re = state.forceStringNoCtx(*args[0], pos);
 
     try {
@@ -3598,6 +3686,7 @@ static RegisterPrimOp primop_match({
    non-matching parts interleaved by the lists of the matching groups. */
 void prim_split(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "split");
     auto re = state.forceStringNoCtx(*args[0], pos);
 
     try {
@@ -3701,6 +3790,7 @@ static RegisterPrimOp primop_split({
 
 static void prim_concatStringsSep(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "concatStringsSep");
     PathSet context;
 
     auto sep = state.forceString(*args[0], context, pos);
@@ -3731,6 +3821,7 @@ static RegisterPrimOp primop_concatStringsSep({
 
 static void prim_replaceStrings(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "replaceStrings");
     state.forceList(*args[0], pos);
     state.forceList(*args[1], pos);
     if (args[0]->listSize() != args[1]->listSize())
@@ -3811,6 +3902,7 @@ static RegisterPrimOp primop_replaceStrings({
 
 static void prim_parseDrvName(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "parseDrvName");
     auto name = state.forceStringNoCtx(*args[0], pos);
     DrvName parsed(name);
     auto attrs = state.buildBindings(2);
@@ -3835,6 +3927,7 @@ static RegisterPrimOp primop_parseDrvName({
 
 static void prim_compareVersions(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "compareVersions");
     auto version1 = state.forceStringNoCtx(*args[0], pos);
     auto version2 = state.forceStringNoCtx(*args[1], pos);
     v.mkInt(compareVersions(version1, version2));
@@ -3855,6 +3948,7 @@ static RegisterPrimOp primop_compareVersions({
 
 static void prim_splitVersion(EvalState & state, const PosIdx pos, Value * * args, Value & v)
 {
+    NIX_TRACE(state, state.positions[pos], "splitVersion");
     auto version = state.forceStringNoCtx(*args[0], pos);
     auto iter = version.cbegin();
     Strings components;
