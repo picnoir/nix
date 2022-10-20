@@ -104,6 +104,8 @@
             buildPackages.git
             buildPackages.mercurial # FIXME: remove? only needed for tests
             buildPackages.jq # Also for custom mdBook preprocessor.
+            buildPackages.bear
+            buildPackages.clang-tools
           ]
           ++ lib.optionals stdenv.hostPlatform.isLinux [(buildPackages.util-linuxMinimal or buildPackages.utillinuxMinimal)];
 
