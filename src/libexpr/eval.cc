@@ -37,6 +37,97 @@
 
 namespace nix {
 
+struct TraceData {
+    // Dummy
+    std::string file;
+    size_t line;
+
+    static TraceData fromPos(Pos p) {
+        return TraceData {
+            p.file,
+            p.line
+        };
+    }
+};
+
+template<typename Data, size_t size>
+struct TracingChunk {
+
+    struct Entry {
+        uint64_t ts_entry;
+        uint64_t ts_exit;
+        Data data;
+    };
+
+    static inline uint64_t now() {
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        return (uint64_t(tv.tv_sec) * 100000) | tv.tv_usec;
+    }
+
+    struct EntryRAII {
+        Entry* e;
+        EntryRAII(Entry* e, Data d) : e(e) {
+            e->ts_entry = now();
+            e->data = d;
+        }
+
+        ~EntryRAII() {
+            e->ts_exit = now();
+        }
+    };
+
+    Entry data[size];
+    size_t pos;
+
+    TracingChunk(): pos(0) {}
+
+
+    inline bool has_capacity() const {
+        return pos < size - 1;
+    }
+
+    inline EntryRAII create(Data d) {
+        // assert(has_capacity()); -- we are writing C++ to go fast, who cares about correctness?!?
+        auto e = &data[pos++];
+        return EntryRAII(e, d);
+    }
+};
+
+template <typename Data, size_t chunk_size=4096>
+struct TracingBuffer {
+
+    typedef TracingChunk<Data, chunk_size> TC;
+    // Linked-list of all the chunks that we know about, the last chunk in the list is the latest
+    std::list<TC> chunks;
+    TC& current_chunk; // FIXME: undefined before alloc_new_chunk
+
+    TracingBuffer() {
+        alloc_next_chunk();
+    }
+
+    inline void alloc_next_chunk() {
+        current_chunk = chunks.emplace_back(TC());
+    }
+
+    inline typename TC::EntryRAII create(Data d) {
+#ifndef unlikely
+        // FIXME detect if the compiler supports this
+#define unlikely(x) __builtin_expect((x), 0)
+#endif
+
+        if (unlikely(!current_chunk.has_capacity())) {
+            alloc_next_chunk();
+        }
+
+        return current_chunk.create(d);
+    }
+};
+
+typedef TracingBuffer<TraceData> TracingBufferT;
+std::unique_ptr<TracingBufferT> trace;
+
+
 static char * allocString(size_t size)
 {
     char * t;
@@ -1271,6 +1362,13 @@ void EvalState::cacheFile(
 
 void EvalState::eval(Expr * e, Value & v)
 {
+
+    std::optional<TracingBufferT::TC::EntryRAII> t = {}; // RAII container to ensure that exiting the call actually calls the destructor, actual type is std::optional<TracingChunk::EntryRAII>
+
+    if (trace) {
+        t = std::optional(trace->create(TraceData::fromPos(positions[e->getPos()])));
+    }
+
     e->eval(*this, baseEnv, v);
 }
 
