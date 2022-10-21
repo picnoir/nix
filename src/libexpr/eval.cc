@@ -1289,39 +1289,55 @@ void EvalState::printTraces() const {
     }
 
     std::deque<TracingBufferT::TC::Entry*> stack;
-
+    std::cout << "[" << std::endl;
+    auto writeComma = false;
     for (auto it = tracingBuffer->chunks.begin(); it != tracingBuffer->chunks.end(); it++) {
         auto & chunk = *it;
         for (size_t i = 0; i < chunk.pos; i++) {
             auto * e = &chunk.data[i];
-
-            size_t n = 0;
-            for (auto eit = stack.rbegin(); eit != stack.rend(); eit++) {
-                auto element = *eit;
-                if (element->ts_exit < e->ts_entry) {
-                    n++;
-                    std::cout << element->ts_exit << " out ";
-                    element->data.print(std::cout);
-                    std::cout << " " << std::endl;
-                    assert(!element->data.invalid);
-                    element->data.invalid = true;
-                } else {
-                    break;
-                }
+            if(writeComma) {
+                std::cout << ",";
+            } else {
+                writeComma = true;
             }
+            std::cout << "{\"name\": \"" << e->data.file << " " << e->data.line
+                      << " " << e->data.type << "\", \"cat\": \""
+                      << "empty"
+                      << "\", \"ph\": \"X\", \"pid\": 0, \"tid\": 0, \"ts\": "
+                      << e->ts_entry
+                      << ", \"dur\":" << e->ts_exit - e->ts_entry
+                      << "}"
+                      << std::endl;
 
-            while (n > 0) {
-                stack.pop_back();
-                n--;
-            }
+            //size_t n = 0;
+            //for (auto eit = stack.rbegin(); eit != stack.rend(); eit++) {
+            //    auto element = *eit;
+            //    if (element->ts_exit < e->ts_entry) {
+            //        n++;
+            //        std::cout << element->ts_exit << " out ";
+            //        element->data.print(std::cout);
+            //        std::cout << " " << std::endl;
+            //        assert(!element->data.invalid);
+            //        element->data.invalid = true;
+            //    } else {
+            //        break;
+            //    }
+            //}
 
-            std::cout << e->ts_entry << " in ";
-            e->data.print(std::cout);
-            std::cout << " " << std::endl;
+            //while (n > 0) {
+            //    stack.pop_back();
+            //    n--;
+            //}
 
-            stack.push_back(e);
+            //std::cout << e->ts_entry << " in ";
+            //e->data.print(std::cout);
+            //std::cout << " " << std::endl;
+
+            //stack.push_back(e);
         }
     }
+
+    std::cout << "]";
 
     for (auto eit = stack.rbegin(); eit != stack.rend(); eit++) {
         auto element = *eit;
