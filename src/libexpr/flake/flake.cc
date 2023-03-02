@@ -82,7 +82,7 @@ static void forceTrivialValue(EvalState & state, Value & value, const PosIdx pos
 static void expectType(EvalState & state, ValueType type,
     Value & value, const PosIdx pos)
 {
-    forceTrivialValue(state, value, pos);
+    state.forceValueDeep(value);
     if (value.type() != type)
         throw Error("expected %s but got %s at %s",
             showType(type), showType(value.type()), state.positions[pos]);
@@ -218,7 +218,7 @@ static Flake getFlake(
         throw Error("source tree referenced by '%s' does not contain a '%s/flake.nix' file", lockedRef, lockedRef.subdir);
 
     Value vInfo;
-    state.evalFile(flakeFile, vInfo, true); // FIXME: symlink attack
+    state.evalFile(flakeFile, vInfo, false); // FIXME: symlink attack
 
     expectType(state, nAttrs, vInfo, state.positions.add({flakeFile}, 1, 1));
 
