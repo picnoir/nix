@@ -93,8 +93,6 @@ void handleDiffHook(
     }
 }
 
-const Path LocalDerivationGoal::homeDir = "/homeless-shelter";
-
 
 LocalDerivationGoal::~LocalDerivationGoal()
 {
@@ -406,6 +404,7 @@ static void linkOrCopy(const Path & from, const Path & to)
 
 void LocalDerivationGoal::startBuilder()
 {
+    homeDir = "/homeless-shelter";
     if ((buildUser && buildUser->getUIDCount() != 1)
         #if __linux__
         || settings.useCgroups
@@ -745,6 +744,7 @@ void LocalDerivationGoal::startBuilder()
         #endif
 #endif
     } else {
+        homeDir = std::filesystem::path(tmpDir) / "homeless-shelter";
         if (parsedDrv->useUidRange())
             throw Error("feature 'uid-range' is only supported in sandboxed builds");
     }

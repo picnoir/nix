@@ -131,7 +131,7 @@ struct LocalDerivationGoal : public DerivationGoal
     uid_t sandboxUid() { return usingUserNamespace ? (!buildUser || buildUser->getUIDCount() == 1 ? 1000 : 0) : buildUser->getUID(); }
     gid_t sandboxGid() { return usingUserNamespace ? (!buildUser || buildUser->getUIDCount() == 1 ? 100  : 0) : buildUser->getGID(); }
 
-    const static Path homeDir;
+    Path homeDir;
 
     /**
      * The recursive Nix daemon socket.
