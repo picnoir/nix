@@ -81,7 +81,8 @@ void processExpr(EvalState & state, const Strings & attrPaths,
                     if (store2)
                         drvPathS = store2->addPermRoot(drvPath, rootName);
                 }
-                std::cout << fmt("%s%s\n", drvPathS, (outputName != "out" ? "!" + outputName : ""));
+                // THis is polluting the nice trace we're generating, boo.
+                //    std::cout << fmt("%s%s\n", drvPathS, (outputName != "out" ? "!" + outputName : ""));
             }
         }
     }
