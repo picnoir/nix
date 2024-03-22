@@ -78,6 +78,23 @@ struct FetchTreeParams {
     bool isFetchGit = false;
 };
 
+// Primop used to fetch the flakes sources.
+//
+// The function is quite big and does a lot of different things.
+//
+// Overall, the goal here is to transform the attributeset or string
+// given to the fetchTree function into a Input struct (see
+// fetchers.hh) that can be fed to a fetcher.
+//
+// The confusing part of this function comes from the fact it's used
+// on multiple kind of inputs. The value given in parameter can be:
+//
+// - An attributeset containing a fetcher type and all the parameters
+//   required to perform the fetch.
+// - A string containing a git ref.
+//
+// We then call the fetcher on that input and generate the lockfile
+// attrset from the result.
 static void fetchTree(
     EvalState & state,
     const PosIdx pos,
@@ -92,12 +109,18 @@ static void fetchTree(
 
     state.forceValue(*args[0], pos);
 
+    // This branch parses re-format a "regular" fetchtree call.
+    // Regular means this call hasn't been triggered by a fetchgit
+    // string-based fetcher and has a attrset as parameter.
     if (args[0]->type() == nAttrs) {
         state.forceAttrs(*args[0], pos, "while evaluating the argument passed to builtins.fetchTree");
 
         fetchers::Attrs attrs;
 
+        // Figuring out what's the fetcher type.
         if (auto aType = args[0]->attrs->get(state.sType)) {
+            // If we already know we're about to fetch a git repo, the
+            // attrset shouldn't specificy a type.
             if (type)
                 state.error<EvalError>(
                     "unexpected attribute 'type'"
@@ -110,9 +133,14 @@ static void fetchTree(
 
         attrs.emplace("type", type.value());
 
+        // Iterating on the parameter attributes
         for (auto & attr : *args[0]->attrs) {
+            // Ignoring type
             if (attr.name == state.sType) continue;
             state.forceValue(*attr.value, attr.pos);
+            // Coerce attr value to string if it's not already one (or a path)
+            // If it's a git path, rewrite it to make sure it's in a
+            // expected format (and not SCP format).
             if (attr.value->type() == nPath || attr.value->type() == nString) {
                 auto s = state.coerceToString(attr.pos, *attr.value, context, "", false, false).toOwned();
                 attrs.emplace(state.symbols[attr.name],
@@ -120,6 +148,7 @@ static void fetchTree(
                     ? fixGitURL(s)
                     : s);
             }
+            // Inline booleans and ints
             else if (attr.value->type() == nBool)
                 attrs.emplace(state.symbols[attr.name], Explicit<bool>{attr.value->boolean});
             else if (attr.value->type() == nInt)
@@ -133,6 +162,7 @@ static void fetchTree(
                     state.symbols[attr.name], showType(*attr.value)).debugThrow();
         }
 
+        // Add exportIgnore flag if we're not using git submodules.
         if (params.isFetchGit && !attrs.contains("exportIgnore") && (!attrs.contains("submodules") || !*fetchers::maybeGetBoolAttr(attrs, "submodules"))) {
             attrs.emplace("exportIgnore", Explicit<bool>{true});
         }
@@ -145,10 +175,15 @@ static void fetchTree(
 
         input = fetchers::Input::fromAttrs(std::move(attrs));
     } else {
+        // The parameter we fed to fetchTree is a string. This is
+        // likely a fetchGir call.
+        //
+        // Coercing the arg to a string.
         auto url = state.coerceToString(pos, *args[0], context,
                 "while evaluating the first argument passed to the fetcher",
                 false, false).toOwned();
 
+        // Transforming the string into a Input object
         if (params.isFetchGit) {
             fetchers::Attrs attrs;
             attrs.emplace("type", "git");
@@ -166,9 +201,13 @@ static void fetchTree(
         }
     }
 
+    // Resolve the unlocked inputs
+
+    // If we're not in eval mode, use the registries to resolve the input.
     if (!evalSettings.pureEval && !input.isDirect() && experimentalFeatureSettings.isEnabled(Xp::Flakes))
         input = lookupInRegistries(state.store, input).first;
 
+    // If we're in pure eval, we're done, we can't lock this.
     if (evalSettings.pureEval && !input.isLocked()) {
         auto fetcher = "fetchTree";
         if (params.isFetchGit)
@@ -180,12 +219,15 @@ static void fetchTree(
         ).atPos(pos).debugThrow();
     }
 
+    // Make sure input is not a unauthorized FS access.
     state.checkURI(input.toURLString());
 
+    // Download the input to the Nix store
     auto [storePath, input2] = input.fetchToStore(state.store);
 
     state.allowPath(storePath);
 
+    // Retrieve the lockfile via the v value.
     emitTreeAttrs(state, storePath, input2, v, params.emptyRevFallback, false);
 }
 
