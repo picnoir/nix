@@ -2,6 +2,8 @@
 #include "nix/store/binary-cache-store.hh"
 #include "nix/util/compression.hh"
 #include "nix/store/derivations.hh"
+#include "nix/util/logging.hh"
+#include "nix/util/signature/local-keys.hh"
 #include "nix/util/source-accessor.hh"
 #include "nix/store/globals.hh"
 #include "nix/store/nar-info.hh"
@@ -16,6 +18,7 @@
 
 #include <chrono>
 #include <future>
+#include <memory>
 #include <regex>
 #include <fstream>
 #include <sstream>
@@ -33,11 +36,21 @@ BinaryCacheStore::BinaryCacheStore(const Params & params)
             SecretKey { readFile(secretKeyFile) }));
 
     if (secretKeyFiles != "") {
-        std::stringstream ss(secretKeyFiles);
-        Path keyPath;
-        while (std::getline(ss, keyPath, ',')) {
+        // secretKeyFiles should be a JSON list of strings.
+        nlohmann::json j = nlohmann::json::parse(secretKeyFiles.get());
+        if (!j.is_array()) {
+            logger->warn("Not an array!!!");
+            throw std::runtime_error("secretKeyFiles is not a JSON array");
+        }
+        for (const auto& keyPath : j) {
+            logger->warn("Parsing keypath!!!");
+            if (!keyPath.is_string()) {
+                logger->warn("Not a string!!!!");
+                throw std::runtime_error("Array contains non-string elements");
+            }
             signers.push_back(std::make_unique<LocalSigner>(
-                SecretKey { readFile(keyPath) }));
+                SecretKey { readFile(keyPath.get<std::string>())}
+            ));
         }
     }
 

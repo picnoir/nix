@@ -112,7 +112,7 @@ nix store verify --store "$TEST_ROOT"/store0 -r "$outPath2" --trusted-public-key
 nix copy --to "$TEST_ROOT"/store0 "$outPathCA"
 
 # Test multiple signing keys
-nix copy --to "file://$TEST_ROOT/storemultisig?secret-keys=$TEST_ROOT/sk1,$TEST_ROOT/sk2" "$outPath"
+nix copy --to "file://$TEST_ROOT/storemultisig?secret-keys=[\"$TEST_ROOT/sk1\",\"$TEST_ROOT/sk2\"]" "$outPath"
 for file in "$TEST_ROOT/storemultisig/"*.narinfo; do
     if [[ "$(grep -cE  '^Sig: cache[1,2]\.example.org' "$file")" -ne 2 ]]; then
         echo "ERROR: Cannot find cache1.example.org and cache2.example.org signatures in ${file}"
